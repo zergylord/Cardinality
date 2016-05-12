@@ -8,12 +8,19 @@ require 'optim'
 require 'gnuplot'
 require 'distributions'
 num_numer = 20
-hid_dim = 100
+hid_dim = 1000
+num_layers = 0
 mb_dim = 32
 num_steps = 1e4
-refresh = 1e1
+refresh = 1e2
 config = {learningRate=1e-3}
-
+use_count = 2
+ratio = torch.ones(num_steps)
+anneal_end = 1e3
+ratio[{{1,anneal_end}}] = torch.linspace(-6,6,anneal_end):sigmoid()
+--ratio[{{1,anneal_end}}] = torch.linspace(0,1,anneal_end)
+--ratio[{{1,anneal_end}}] = 0
+--slomo = true
 
 numerals = torch.range(1,num_numer)
 num_unique = torch.range(1,num_numer+1):sum()-1
@@ -44,11 +51,7 @@ for tok=0,num_numer do
         end
     end
 end
-use_count = 1
-ratio = torch.ones(num_steps)
-anneal_end = 1e4
-ratio[{{1,anneal_end}}] = torch.linspace(-6,6,anneal_end):sigmoid()
-if use_count then --interleaved
+if use_count == 1 then --interleaved without tokens
     crep = torch.zeros(num_numer,num_numer*2+2)
     cweight = torch.ones(num_numer):mul(weight:sum()/num_numer)
     for prev=0,num_numer-1 do
@@ -60,15 +63,36 @@ if use_count then --interleaved
     end
     rep = rep:cat(crep,1)
     weight = weight:cat(cweight)
+elseif use_count == 2 then --interleaved with random tokens
+    num_count_data = num_numer*(num_numer+1)
+    crep = torch.zeros(num_count_data,num_numer*2+2)
+    cweight = torch.ones(num_count_data):mul(weight:sum()/num_count_data)
+    ind = 1
+    for prev=0,num_numer-1 do
+        if prev > 0 then
+            crep[{{ind,ind+num_numer},{num_numer+prev}}]= 1
+        end
+        crep[{{ind,ind+num_numer},{-2}}] = 1
+        crep[{{ind,ind+num_numer},{-1}}] = prev+1
+        for tok = 0,num_numer do
+            if tok > 0 then
+                crep[ind][{{1,tok}}] = 1
+            end
+            ind = ind+1
+        end
+    end
+    rep = rep:cat(crep,1)
+    weight = weight:cat(cweight)
 end
+--[[
 gnuplot.figure(2)
 gnuplot.bar(weight)
---gnuplot.imagesc(rep)
+gnuplot.imagesc(rep)
+--]]
 
 local input = nn.Identity()()
 local hid1 = nn.ReLU()(nn.Linear(rep:size(2)-1,hid_dim)(input))
 local hid = hid1
-num_layers = 1
 for i = 1,num_layers do
     hid = nn.ReLU()(nn.Linear(hid_dim,hid_dim)(hid))
 end
@@ -122,14 +146,23 @@ for t = 1,num_steps do
         for i=1,num_numer do
             if learn_time[i] == 0 then
                 done = false
-                if percent_perfect[i] > .8 then
+                if percent_perfect[i] > .75 then
                     learn_time[i] = t
                 end
             end
+            --
+            if learn_time[i] > 0 and percent_perfect[i] < .25 then
+                learn_time[i] = 0
+            end
+            --]]
         end
         gnuplot.plot(learn_time)
+        gnuplot.axis{'','',0,''}
 
-        --sys.sleep(1)
+        if slowmo and t > anneal_end then
+            sys.sleep(.5)
+            refresh = 1e1
+        end
         cumloss = 0
         if done then
             print(t)
