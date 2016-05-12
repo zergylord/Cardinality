@@ -8,7 +8,7 @@ require 'optim'
 require 'gnuplot'
 require 'distributions'
 num_numer = 30
-hid_dim = 100
+hid_dim = 1000
 mb_dim = 32
 num_steps = 1e4
 refresh = 1e1
@@ -39,7 +39,7 @@ for tok=0,num_numer do
                 rep[ind][-1] = num_numer+1 --done
             end
             id[ind] = prev+tok
-            weight[ind] = numer_weight[id[ind] ]
+            weight[ind] = numer_weight[id[ind] ]/(id[ind]+1) --chance of picking that task / number of steps in task
             ind = ind + 1
         end
     end
