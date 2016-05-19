@@ -13,14 +13,15 @@ num_layers = 0
 mb_dim = 32
 num_steps = 1e4
 refresh = 1e2
+performance_cutoff = .9
 config = {learningRate=1e-3}
-use_count = 2
+use_count = 1
 ratio = torch.ones(num_steps)
-anneal_end = 1e3
-ratio[{{1,anneal_end}}] = torch.linspace(-6,6,anneal_end):sigmoid()
+anneal_end = 1e3 --num_steps
+--ratio[{{1,anneal_end}}] = torch.linspace(-6,6,anneal_end):sigmoid()
 --ratio[{{1,anneal_end}}] = torch.linspace(0,1,anneal_end)
---ratio[{{1,anneal_end}}] = 0
---slomo = true
+ratio[{{1,anneal_end}}] = 0 --.3
+slomo = true
 
 numerals = torch.range(1,num_numer)
 num_unique = torch.range(1,num_numer+1):sum()-1
@@ -84,11 +85,13 @@ elseif use_count == 2 then --interleaved with random tokens
     rep = rep:cat(crep,1)
     weight = weight:cat(cweight)
 end
---[[
+--
 gnuplot.figure(2)
 gnuplot.bar(weight)
-gnuplot.imagesc(rep)
+gnuplot.imagesc(rep[{{},{1,-2}}])
 --]]
+sys.sleep(100)
+
 
 local input = nn.Identity()()
 local hid1 = nn.ReLU()(nn.Linear(rep:size(2)-1,hid_dim)(input))
@@ -146,7 +149,7 @@ for t = 1,num_steps do
         for i=1,num_numer do
             if learn_time[i] == 0 then
                 done = false
-                if percent_perfect[i] > .75 then
+                if percent_perfect[i] > performance_cutoff then
                     learn_time[i] = t
                 end
             end
@@ -157,7 +160,7 @@ for t = 1,num_steps do
             --]]
         end
         gnuplot.plot(learn_time)
-        gnuplot.axis{'','',0,''}
+        gnuplot.axis{'','',0,2000}
 
         if slowmo and t > anneal_end then
             sys.sleep(.5)
